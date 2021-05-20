@@ -75,11 +75,13 @@ async function parse(node: any, html: string): Promise<boolean> {
   const $home = $('#home')
   const $table = $($home.find('table')[0])
   const $tds = $table.find('td')
-  const texts = $tds.length === 5 ?
-    $tds.toArray().map((e) => $(e).text()) :
-    ['N/A', 'N/A', 'N/A', 'N/A', 'N/A']
-  let data: string[]
+  const texts = $tds.toArray().map((e) => $(e).text())
+  if (texts.length !== 5) {
+    console.error('texts', node.key, texts)
+    return false
+  }
 
+  let data: string[]
   const js0 = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
   const labels = ((js0.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
   if (labels.length === expectedLabels.length) {
@@ -111,7 +113,8 @@ async function parse(node: any, html: string): Promise<boolean> {
 
 async function loop(children: any[]) {
   for (const node of children) {
-    if (node.folder === true) {
+    // edge cases: key=9697 hscode=03061701 has two children
+    if (node.folder === true || node.key === 9697) {
       // console.log('Processing... #%d (lvl=%d)', node.key, node.lvl)
       const grandChildren = await getChildren(node);
       if (Array.isArray(grandChildren)) {
