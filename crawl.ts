@@ -105,7 +105,7 @@ async function parse(node: any, html: string): Promise<boolean> {
     }
   }
 
-  await writer.writeRecords([[node.title, ...texts, ...data]])
+  await writer.writeRecords([[node.hscode, ...texts, ...data]])
   return true
 }
 
