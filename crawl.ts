@@ -72,32 +72,36 @@ async function downloadHtml(node: any): Promise<string> {
 
 async function parse(node: any, html: string): Promise<boolean> {
   const $ = cheerio.load(html)
-  const $table = $($('#home').find('table')[0])
+  const $home = $('#home')
+  const $table = $($home.find('table')[0])
   const $tds = $table.find('td')
-  const texts = $tds.toArray().map((e) => $(e).text())
-  if (texts.length !== 5) {
-    console.error('texts', node.key, texts)
-    return false
-  }
-
-  const type = texts[4]
-  const isCsq = type === 'CSQ'
+  const texts = $tds.length === 5 ?
+    $tds.toArray().map((e) => $(e).text()) :
+    ['N/A', 'N/A', 'N/A', 'N/A', 'N/A']
   let data: string[]
 
-  if (isCsq) {
-    data = expectedLabels.map((_) => type)
-  } else {
-    const js0 = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
-    const labels = ((js0.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
-    if (labels.length !== expectedLabels.length || labels.join(',') !== expectedLabels.join(',')) {
+  const js0 = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
+  const labels = ((js0.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
+  if (labels.length === expectedLabels.length) {
+    if (labels.join(',') !== expectedLabels.join(',')) {
       console.error('labels', node.key, labels)
       return false
     }
 
-    data = ((js0.match(/"data":\["([0-9",\.]+)"\]/) ?? [])[1] ?? '').split('","')
+    data = ((js0.match(/"data":\["([0-9",\.]+)"\]/) ?? [])[1] ?? '').split('","').map((str) => `${parseFloat(str)}%`)
     if (data.length !== expectedLabels.length) {
-      console.error('data', node.key, data)
+      console.error('chart data', node.key, data)
       return false
+    }
+  } else {
+    // no chart, extract data from table
+    data = $home.find('.card-deck tbody tr').map((_, tr) => {
+      const td = $(tr).find('td')[1]
+      return $(td).text().trim()
+    }).toArray()
+
+    while (data.length < expectedLabels.length) {
+      data.push('N/A')
     }
   }
 
