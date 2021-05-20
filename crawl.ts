@@ -57,6 +57,11 @@ async function downloadHtml(node: any): Promise<string> {
   }
 
   const req = await fetch(url, init)
+  if (req.status !== 200) {
+    console.error('status', node.key, req.status)
+    return ''
+  }
+
   const html = await req.text()
   if (html.length > 0) {
     fs.writeFileSync(path, html)
