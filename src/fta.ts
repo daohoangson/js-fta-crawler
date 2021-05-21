@@ -1,6 +1,9 @@
 import cheerio from 'cheerio'
 
-import { downloadHtml, getChildren } from './remote'
+import { downloadHtml, getChildren, http, httpCsrf } from './remote'
+import { normalize } from './unicode'
+
+export type Direction = 'in' | 'out'
 
 export interface Node {
   folder: boolean
@@ -25,10 +28,27 @@ export const headers = [
   ...dates
 ]
 
+let countries: Array<{ id: number, normalized: string }> | undefined
 let found = 0
 let parsed = 0
 
-export async function loop (nodes: Node[], writer: Writer): Promise<void> {
+async function collectCountries (): Promise<void> {
+  process.stderr.write('Collecting countries...\n')
+  const resp = await http('/')
+  const html = await resp.text()
+  const $ = cheerio.load(html)
+  const $options = $('#commodityformsearch-country_id option')
+
+  countries = $options.map((_, e) => {
+    const $option = $(e)
+    return {
+      id: parseInt($option.attr('value') ?? '0'),
+      normalized: normalize($option.text())
+    }
+  }).toArray()
+}
+
+async function loop (nodes: Node[], writer: Writer): Promise<void> {
   for (const node of nodes) {
     // edge cases: key=9697 hscode=03061701 has two children
     if (node.folder || node.key === 9697) {
@@ -60,7 +80,23 @@ export async function loop (nodes: Node[], writer: Writer): Promise<void> {
   }
 }
 
-export async function parse (html: string): Promise<string[]> {
+function getCountryId (country: string | number): number {
+  if (typeof country === 'number') {
+    return country
+  }
+
+  if (countries !== undefined) {
+    const normalized = normalize(country)
+    for (const candidate of countries) {
+      if (candidate.normalized === normalized) {
+        return candidate.id
+      }
+    }
+  }
+  return 0
+}
+
+async function parse (html: string): Promise<string[]> {
   const $ = cheerio.load(html)
   const $home = $('#home')
   const $table = $($home.find('table')[0])
@@ -98,4 +134,41 @@ export async function parse (html: string): Promise<string[]> {
   }
 
   return [...texts, ...tableValues]
+}
+
+async function search (dir: Direction, countryId: number): Promise<Node[]> {
+  const params = new URLSearchParams()
+  httpCsrf(params)
+  params.append('commodity', '1')
+  params.append('service', '1')
+  params.append('CommodityFormSearch[direction]', dir)
+  params.append('CommodityFormSearch[country_id]', countryId.toString())
+  const body = params.toString()
+
+  process.stderr.write(`Searching direction=${dir} country_id=${countryId}...\n`)
+  const resp = await http('/index.php?r=site%2Fsearch-commodity', {
+    body,
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded'
+    },
+    method: 'POST'
+  })
+
+  const html = await resp.text()
+  const m = html.match(/"source":(\[.+\])}\);<\/script>/)
+  if (m === null) {
+    return []
+  }
+
+  return JSON.parse(m[1])
+}
+
+export async function start (dir: Direction, country: string | number, writer: Writer): Promise<void> {
+  if (countries === undefined) {
+    await collectCountries()
+  }
+
+  const countryId = getCountryId(country)
+  const nodes = await search(dir, countryId)
+  await loop(nodes, writer)
 }

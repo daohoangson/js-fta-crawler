@@ -1,14 +1,44 @@
 import { createArrayCsvWriter } from 'csv-writer'
-import fs from 'fs'
+import yargs from 'yargs'
 
-import { headers, loop } from '../src/fta'
+import { Direction, headers, start } from '../src/fta'
 
-const csv = createArrayCsvWriter({
-  path: 'result.csv',
-  header: headers
-})
-const source = JSON.parse(fs.readFileSync('./source.json').toString('utf8'))
-loop(source, async (values) => await csv.writeRecords([values])).then(
-  (_) => { },
-  (_) => { }
+async function startCsv (dir: Direction, country: string | number): Promise<void> {
+  const path = `${country}-${dir}.csv`
+  const csv = createArrayCsvWriter({
+    path,
+    header: headers
+  })
+
+  await start(dir, country, async (values) => await csv.writeRecords([values]))
+  process.stderr.write(`Written to ${path}\n`)
+}
+
+Promise.resolve(
+  yargs
+    .option('export', {
+      alias: 'e',
+      description: 'Process export data',
+      type: 'boolean'
+    })
+    .option('import', {
+      alias: 'i',
+      description: 'Process import data',
+      type: 'boolean'
+    })
+    .help().alias('help', 'h')
+    .argv
+).then(
+  async (argv) => {
+    for (const country of argv._) {
+      if (argv.export === true) {
+        await startCsv('out', country)
+      }
+
+      if (argv.import === true) {
+        await startCsv('in', country)
+      }
+    }
+  },
+  (e) => console.error(e)
 )
