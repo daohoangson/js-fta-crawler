@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "ts-node crawl.ts"
+    "lint": "ts-standard --fix",
+    "start": "ts-node bin/crawl.ts"
   },
   "author": "",
   "license": "ISC",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@types/node": "^15.3.1",
-    "@types/node-fetch": "^2.5.10"
+    "@types/node-fetch": "^2.5.10",
+    "ts-standard": "^10.0.0"
   }
 }
