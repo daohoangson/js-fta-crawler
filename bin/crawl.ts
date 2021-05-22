@@ -2,6 +2,7 @@ import { createArrayCsvWriter } from 'csv-writer'
 import yargs from 'yargs'
 
 import { Direction, headers, start } from '../src/fta'
+import { log } from '../src/io'
 
 async function startCsv (dir: Direction, country: string | number): Promise<void> {
   const path = `${country}-${dir}.csv`
@@ -11,7 +12,7 @@ async function startCsv (dir: Direction, country: string | number): Promise<void
   })
 
   await start(dir, country, async (values) => await csv.writeRecords([values]))
-  process.stderr.write(`Written to ${path}\n`)
+  log(`Write to ${path} ok`)
 }
 
 Promise.resolve(

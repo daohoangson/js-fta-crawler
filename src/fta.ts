@@ -1,4 +1,5 @@
 import cheerio from 'cheerio'
+import { error, log, progress } from './io'
 
 import { downloadHtml, getChildren, http, httpCsrf } from './remote'
 import { normalize } from './unicode'
@@ -55,7 +56,7 @@ let found = 0
 let parsed = 0
 
 async function collectCountries (): Promise<void> {
-  process.stderr.write('Collecting countries...\n')
+  log('Collecting countries...')
   const resp = await http('/')
   const html = await resp.text()
   const $ = cheerio.load(html)
@@ -81,21 +82,19 @@ async function loop (nodes: Node[], writer: Writer): Promise<void> {
     } else {
       found++
 
-      if (parsed % 25 === 0) {
-        process.stderr.write(` (${parsed} / ${found}) `)
-      } else {
-        process.stderr.write('.')
-      }
+      progress(`[${parsed} / ${found}] ${node.hscode}...`)
       const html = await downloadHtml(node)
       try {
         const values = await parse(html)
         parsed++
+
+        progress(`[${parsed} / ${found}] ${node.hscode} ok`)
         await writer([node.hscode, ...values])
       } catch (e) {
         if (e instanceof Error) {
-          process.stderr.write(`${node.key} -> ${e.message}`)
+          error(`${node.key} -> error ${e.message}`)
         } else {
-          process.stderr.write(`${node.key} -> unknown error`)
+          error(`${node.key} -> unknown error`)
         }
       }
     }
@@ -176,7 +175,7 @@ async function search (dir: Direction, countryId: number): Promise<Node[]> {
   params.append('CommodityFormSearch[country_id]', countryId.toString())
   const body = params.toString()
 
-  process.stderr.write(`Searching direction=${dir} country_id=${countryId}...\n`)
+  log(`Searching direction=${dir} country_id=${countryId}...`)
   const resp = await http('/index.php?r=site%2Fsearch-commodity', {
     body,
     headers: {
