@@ -40,35 +40,6 @@ npm start -- --export --import duc mexico
 The script will save data into separate CSV files in the current directory.
 Each file contains data for a direction (export or import) of a country.
 Filename format: `country-direction.csv` (e.g. `mexico-in.csv`, [mexico-out.csv](https://gist.github.com/daohoangson/0f0e28defc6f394a24990eb0d1f4b20f)).
-The CSV headers:
-
- - Mã
- - Hiệp định
- - Thuế suất cơ sở
- - Thuế suất ưu đãi hiện hành
- - Thuế suất ưu đãi vào cuối lộ trình
- - Lộ trình
- - 2019-01-14
- - 2020-01-01
- - 2021-01-01
- - 2022-01-01
- - 2023-01-01
- - 2024-01-01
- - 2025-01-01
- - 2026-01-01
- - 2027-01-01
- - 2028-01-01
- - 2029-01-01
- - 2030-01-01
- - 2031-01-01
- - 2032-01-01
- - 2033-01-01
- - 2034-01-01
- - 2035-01-01
- - 2036-01-01
- - 2037-01-01
- - 2038-01-01
- - 2039-01-01
 
 ## Countries
 

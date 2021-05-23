@@ -16,40 +16,42 @@ export interface Node {
   title: string
 }
 
+interface ParsedDate {
+  date: string
+  afterwards: boolean
+}
+
+interface ParsedHeader {
+  texts: string[]
+  dates: string[]
+}
+
+interface ParsedValue {
+  date: ParsedDate
+  value: string
+}
+
+export interface Result {
+  header: ParsedHeader
+  nodes: ParsedNode[]
+}
+
 export type Writer = (values: string[]) => Promise<void>
 
-const dates = [
-  '2019-01-14',
-  '2020-01-01',
-  '2021-01-01',
-  '2022-01-01',
-  '2023-01-01',
-  '2024-01-01',
-  '2025-01-01',
-  '2026-01-01',
-  '2027-01-01',
-  '2028-01-01',
-  '2029-01-01',
-  '2030-01-01',
-  '2031-01-01',
-  '2032-01-01',
-  '2033-01-01',
-  '2034-01-01',
-  '2035-01-01',
-  '2036-01-01',
-  '2037-01-01',
-  '2038-01-01',
-  '2039-01-01'
-]
-export const headers = [
-  'Mã',
-  'Hiệp định',
-  'Thuế suất cơ sở',
-  'Thuế suất ưu đãi hiện hành',
-  'Thuế suất ưu đãi vào cuối lộ trình',
-  'Lộ trình',
-  ...dates
-]
+const months: { [key: string]: string | undefined } = {
+  mot: '01',
+  hai: '02',
+  ba: '03',
+  bon: '04',
+  nam: '05',
+  sau: '06',
+  bay: '07',
+  tam: '08',
+  chin: '09',
+  muoi: '10',
+  muoimot: '11',
+  muoihai: '12'
+}
 
 let countries: Array<{ id: number, normalized: string }> | undefined
 
@@ -85,6 +87,24 @@ function getCountryId (country: string | number): number {
   return 0
 }
 
+function parseDate (dateStr: string): ParsedDate {
+  const m = dateStr.match(/^(\d+) Tháng (.+) (\d{4})(\s+trở về sau)?$/)
+  if (m === null) {
+    throw new Error(JSON.stringify({ dateStr }))
+  }
+
+  const [, day, monthName, year, afterwards] = m
+  const monthNormalized = normalize(monthName)
+  const month = months[monthNormalized]
+  if (month === undefined) {
+    throw new Error(JSON.stringify({ day, month, year, afterwards }))
+  }
+  return {
+    date: `${year}-${month}-${day}`,
+    afterwards: typeof afterwards === 'string'
+  }
+}
+
 async function search (dir: Direction, countryId: number): Promise<Node[]> {
   const params = new URLSearchParams()
   httpCsrf(params)
@@ -112,26 +132,31 @@ async function search (dir: Direction, countryId: number): Promise<Node[]> {
   return JSON.parse(m[1])
 }
 
-export async function start (dir: Direction, country: string | number, writer: Writer): Promise<void> {
+export async function start (dir: Direction, country: string | number): Promise<Result> {
   if (countries === undefined) {
     await collectCountries()
   }
 
   const countryId = getCountryId(country)
   const nodes = await search(dir, countryId)
-  const obj = new Fta(writer)
+  const obj = new Fta()
   await obj.loop(nodes)
+
+  return {
+    header: {
+      texts: obj.textHeaders,
+      // eslint-disable-next-line
+      dates: [...obj.dates].sort()
+    },
+    nodes: obj.parsed
+  }
 }
 
 class Fta {
-  writer: Writer
-
+  dates: string[] = []
   found = 0
-  parsed = 0
-
-  constructor (writer: Writer) {
-    this.writer = writer
-  }
+  parsed: ParsedNode[] = []
+  textHeaders: string[] = []
 
   async loop (nodes: Node[]): Promise<void> {
     for (const node of nodes) {
@@ -144,14 +169,10 @@ class Fta {
       } else {
         this.found++
 
-        progress(`[${this.parsed} / ${this.found}] ${node.hscode}...`)
+        progress(`[${this.found}] ${node.hscode}...`)
         const html = await downloadHtml(node)
         try {
-          const values = await this.parseNode(html)
-          this.parsed++
-
-          progress(`[${this.parsed} / ${this.found}] ${node.hscode} ok`)
-          await this.writer([node.hscode, ...values])
+          this.parsed.push(await this.parseNode(node, html))
         } catch (e) {
           if (e instanceof Error) {
             error(`${node.key} -> error ${e.message}`)
@@ -163,52 +184,72 @@ class Fta {
     }
   }
 
-  async parseNode (html: string): Promise<string[]> {
+  async parseNode (node: Node, html: string): Promise<ParsedNode> {
     const $ = cheerio.load(html)
     const $home = $('#home')
     const $table = $($home.find('table')[0])
-    const $tds = $table.find('td')
-    const texts = $tds.toArray().map((e) => $(e).text())
-    if (texts.length !== 5) {
-      throw new Error(JSON.stringify({ texts }))
+    const tds = $table.find('td').map((_, e) => $(e).text())
+    const ths = $table.find('th').map((_, e) => $(e).text())
+    if (tds.length !== ths.length) {
+      throw new Error(JSON.stringify({ tds, ths }))
+    }
+    const texts: Record<string, string> = {}
+    for (let i = 0; i < ths.length; i++) {
+      const header = ths[i]
+      texts[header] = tds[i]
+
+      const headerIndex = this.textHeaders.indexOf(header)
+      if (headerIndex === -1) {
+        this.textHeaders.push(header)
+      }
     }
 
-    const chartJs = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
-    const chartLabels = ((chartJs.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
-    if (chartLabels.length > 1) {
-      if (chartLabels.length > dates.length) {
-        throw new Error(JSON.stringify({ chartJs, chartLabels, error: 'chartLabels.length > dates.length' }))
+    const values: ParsedValue[] = $home.find('.card-deck tbody tr').map((_, tr) => {
+      const deckTds = $(tr).find('td').map((_, td) => $(td).text().trim())
+      if (deckTds.length !== 2) {
+        throw new Error(JSON.stringify({ deckTds }))
       }
-      for (let i = 0; i < chartLabels.length; i++) {
-        if (chartLabels[i] !== dates[i]) {
-          throw new Error(JSON.stringify({ chartJs, chartLabels, i }))
-        }
-      }
+      const date = parseDate(deckTds[0])
+      const value = deckTds[1]
 
-      const chartValues = ((chartJs.match(/"data":\["([0-9",.]+)"\]/) ?? [])[1] ?? '')
-        .split('","')
-        .map((str) => `${parseFloat(str)}%`)
-      if (chartValues.length !== chartLabels.length) {
-        throw new Error(JSON.stringify({ chartJs, chartLabels, chartValues }))
+      const dateIndex = this.dates.indexOf(date.date)
+      if (dateIndex === -1) {
+        this.dates.push(date.date)
       }
 
-      while (chartValues.length < dates.length) {
-        chartValues.push('N/A')
-      }
-
-      return [...texts, ...chartValues]
-    }
-
-    // no chart, extract values from table
-    const tableValues = $home.find('.card-deck tbody tr').map((_, tr) => {
-      const td = $(tr).find('td')[1]
-      return $(td).text().trim()
+      return { date, value }
     }).toArray()
 
-    while (tableValues.length < dates.length) {
-      tableValues.push('N/A')
+    return new ParsedNode(node.hscode, texts, values)
+  }
+}
+
+export class ParsedNode {
+  hscode: string
+  texts: Record<string, string>
+  values: ParsedValue[]
+
+  constructor (hscode: string, texts: Record<string, string>, values: ParsedValue[]) {
+    this.hscode = hscode
+    this.texts = texts
+    this.values = values
+  }
+
+  getValue (date: string): string {
+    let afterwardsValue: ParsedValue | undefined
+    for (const value of this.values) {
+      if (value.date.date === date) {
+        return value.value
+      }
+      if (value.date.afterwards) {
+        afterwardsValue = value
+      }
     }
 
-    return [...texts, ...tableValues]
+    if (afterwardsValue !== undefined && date > afterwardsValue.date.date) {
+      return afterwardsValue.value
+    }
+
+    return 'N/A'
   }
 }
