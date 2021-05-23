@@ -4,6 +4,18 @@
 
 ## Usage
 
+### Prerequisite
+
+```bash
+# Install Node.js via Homebrew
+brew install node
+
+# Install dependencies
+npm install
+```
+
+### Command line arguments
+
 Get import tarrifs from Mexico:
 
 ```bash
