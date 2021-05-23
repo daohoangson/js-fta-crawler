@@ -52,8 +52,6 @@ export const headers = [
 ]
 
 let countries: Array<{ id: number, normalized: string }> | undefined
-let found = 0
-let parsed = 0
 
 async function collectCountries (): Promise<void> {
   log('Collecting countries...')
@@ -71,36 +69,6 @@ async function collectCountries (): Promise<void> {
   }).toArray()
 }
 
-async function loop (nodes: Node[], writer: Writer): Promise<void> {
-  for (const node of nodes) {
-    // edge cases: key=9697 hscode=03061701 has two children
-    if (node.folder || node.key === 9697) {
-      const grandChildren = await getChildren(node)
-      if (Array.isArray(grandChildren)) {
-        await loop(grandChildren, writer)
-      }
-    } else {
-      found++
-
-      progress(`[${parsed} / ${found}] ${node.hscode}...`)
-      const html = await downloadHtml(node)
-      try {
-        const values = await parse(html)
-        parsed++
-
-        progress(`[${parsed} / ${found}] ${node.hscode} ok`)
-        await writer([node.hscode, ...values])
-      } catch (e) {
-        if (e instanceof Error) {
-          error(`${node.key} -> error ${e.message}`)
-        } else {
-          error(`${node.key} -> unknown error`)
-        }
-      }
-    }
-  }
-}
-
 function getCountryId (country: string | number): number {
   if (typeof country === 'number') {
     return country
@@ -115,55 +83,6 @@ function getCountryId (country: string | number): number {
     }
   }
   return 0
-}
-
-async function parse (html: string): Promise<string[]> {
-  const $ = cheerio.load(html)
-  const $home = $('#home')
-  const $table = $($home.find('table')[0])
-  const $tds = $table.find('td')
-  const texts = $tds.toArray().map((e) => $(e).text())
-  if (texts.length !== 5) {
-    throw new Error(JSON.stringify({ texts }))
-  }
-
-  const chartJs = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
-  const chartLabels = ((chartJs.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
-  if (chartLabels.length > 1) {
-    if (chartLabels.length > dates.length) {
-      throw new Error(JSON.stringify({ chartJs, chartLabels, error: 'chartLabels.length > dates.length' }))
-    }
-    for (let i = 0; i < chartLabels.length; i++) {
-      if (chartLabels[i] !== dates[i]) {
-        throw new Error(JSON.stringify({ chartJs, chartLabels, i }))
-      }
-    }
-
-    const chartValues = ((chartJs.match(/"data":\["([0-9",.]+)"\]/) ?? [])[1] ?? '')
-      .split('","')
-      .map((str) => `${parseFloat(str)}%`)
-    if (chartValues.length !== chartLabels.length) {
-      throw new Error(JSON.stringify({ chartJs, chartLabels, chartValues }))
-    }
-
-    while (chartValues.length < dates.length) {
-      chartValues.push('N/A')
-    }
-
-    return [...texts, ...chartValues]
-  }
-
-  // no chart, extract values from table
-  const tableValues = $home.find('.card-deck tbody tr').map((_, tr) => {
-    const td = $(tr).find('td')[1]
-    return $(td).text().trim()
-  }).toArray()
-
-  while (tableValues.length < dates.length) {
-    tableValues.push('N/A')
-  }
-
-  return [...texts, ...tableValues]
 }
 
 async function search (dir: Direction, countryId: number): Promise<Node[]> {
@@ -200,5 +119,96 @@ export async function start (dir: Direction, country: string | number, writer: W
 
   const countryId = getCountryId(country)
   const nodes = await search(dir, countryId)
-  await loop(nodes, writer)
+  const obj = new Fta(writer)
+  await obj.loop(nodes)
+}
+
+class Fta {
+  writer: Writer
+
+  found = 0
+  parsed = 0
+
+  constructor (writer: Writer) {
+    this.writer = writer
+  }
+
+  async loop (nodes: Node[]): Promise<void> {
+    for (const node of nodes) {
+      // edge cases: key=9697 hscode=03061701 has two children
+      if (node.folder || node.key === 9697) {
+        const grandChildren = await getChildren(node)
+        if (Array.isArray(grandChildren)) {
+          await this.loop(grandChildren)
+        }
+      } else {
+        this.found++
+
+        progress(`[${this.parsed} / ${this.found}] ${node.hscode}...`)
+        const html = await downloadHtml(node)
+        try {
+          const values = await this.parseNode(html)
+          this.parsed++
+
+          progress(`[${this.parsed} / ${this.found}] ${node.hscode} ok`)
+          await this.writer([node.hscode, ...values])
+        } catch (e) {
+          if (e instanceof Error) {
+            error(`${node.key} -> error ${e.message}`)
+          } else {
+            error(`${node.key} -> unknown error`)
+          }
+        }
+      }
+    }
+  }
+
+  async parseNode (html: string): Promise<string[]> {
+    const $ = cheerio.load(html)
+    const $home = $('#home')
+    const $table = $($home.find('table')[0])
+    const $tds = $table.find('td')
+    const texts = $tds.toArray().map((e) => $(e).text())
+    if (texts.length !== 5) {
+      throw new Error(JSON.stringify({ texts }))
+    }
+
+    const chartJs = (html.match(/var chartJS_graph0 = new Chart\(\$\('#graph0'\),(.+)/) ?? [])[1] ?? ''
+    const chartLabels = ((chartJs.match(/"labels":\["([0-9",-]+)"\]/) ?? [])[1] ?? '').split('","')
+    if (chartLabels.length > 1) {
+      if (chartLabels.length > dates.length) {
+        throw new Error(JSON.stringify({ chartJs, chartLabels, error: 'chartLabels.length > dates.length' }))
+      }
+      for (let i = 0; i < chartLabels.length; i++) {
+        if (chartLabels[i] !== dates[i]) {
+          throw new Error(JSON.stringify({ chartJs, chartLabels, i }))
+        }
+      }
+
+      const chartValues = ((chartJs.match(/"data":\["([0-9",.]+)"\]/) ?? [])[1] ?? '')
+        .split('","')
+        .map((str) => `${parseFloat(str)}%`)
+      if (chartValues.length !== chartLabels.length) {
+        throw new Error(JSON.stringify({ chartJs, chartLabels, chartValues }))
+      }
+
+      while (chartValues.length < dates.length) {
+        chartValues.push('N/A')
+      }
+
+      return [...texts, ...chartValues]
+    }
+
+    // no chart, extract values from table
+    const tableValues = $home.find('.card-deck tbody tr').map((_, tr) => {
+      const td = $(tr).find('td')[1]
+      return $(td).text().trim()
+    }).toArray()
+
+    while (tableValues.length < dates.length) {
+      tableValues.push('N/A')
+    }
+
+    return [...texts, ...tableValues]
+  }
 }
