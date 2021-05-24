@@ -6,6 +6,7 @@ import toughCookie from 'tough-cookie'
 
 import { Node } from './fta'
 
+const dataDir = '.data'
 const jar = new toughCookie.CookieJar()
 const fetch = fetchCookie(nodeFetch, jar)
 
@@ -13,7 +14,7 @@ let csrfParam: string | undefined
 let csrfToken: string | undefined
 
 export async function downloadHtml (node: Node): Promise<string> {
-  const cachePath = `.data/${node.key}-download.html`
+  const cachePath = `${dataDir}/${node.key}-download.html`
   if (fs.existsSync(cachePath)) {
     const cached = fs.readFileSync(cachePath).toString('utf8')
     if (cached.length > 0) {
@@ -29,14 +30,14 @@ export async function downloadHtml (node: Node): Promise<string> {
 
   const html = await resp.text()
   if (html.length > 0) {
-    fs.writeFileSync(cachePath, html)
+    mkdirAndWriteFileSync(cachePath, html)
   }
 
   return html
 }
 
 export async function getChildren (node: Node): Promise<any> {
-  const path = `.data/${node.key}-getChildren.json`
+  const path = `${dataDir}/${node.key}-getChildren.json`
   if (fs.existsSync(path)) {
     const cached = JSON.parse(fs.readFileSync(path).toString('utf8'))
     if (Array.isArray(cached)) {
@@ -47,7 +48,7 @@ export async function getChildren (node: Node): Promise<any> {
   const resp = await http(`/index.php?r=site/get-children2&id=${node.key}&sortkey=${node.sortkey}&lvl=${node.lvl}&mode=children&parent=${node.key}`)
   const json = await resp.json()
   if (Array.isArray(json)) {
-    fs.writeFileSync(path, JSON.stringify(json))
+    mkdirAndWriteFileSync(path, JSON.stringify(json))
   }
 
   return json
@@ -80,4 +81,11 @@ export function httpCsrf (params: URLSearchParams): void {
   if (csrfToken === undefined) return
 
   params.append(csrfParam, csrfToken)
+}
+
+function mkdirAndWriteFileSync (path: string, data: string): void {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir)
+  }
+  fs.writeFileSync(path, data)
 }
