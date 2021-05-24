@@ -1,0 +1,38 @@
+name: npm
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '14'
+      - run: npm install --global pkg
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: fta-crawler-linux
+          path: out/crawl-linux
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: fta-crawler-macos
+          path: out/crawl-macos
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: fta-crawler-windows
+          path: out/crawl-win.exe

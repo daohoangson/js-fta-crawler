@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "tsc && pkg --out-path out out/bin/crawl.js",
     "lint": "ts-standard --fix",
     "start": "ts-node bin/crawl.ts"
   },
