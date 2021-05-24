@@ -160,8 +160,7 @@ class Fta {
 
   async loop (nodes: Node[]): Promise<void> {
     for (const node of nodes) {
-      // edge cases: key=9697 hscode=03061701 has two children
-      if (node.folder || node.key === 9697) {
+      if (node.folder) {
         const grandChildren = await getChildren(node)
         if (Array.isArray(grandChildren)) {
           await this.loop(grandChildren)
@@ -174,6 +173,12 @@ class Fta {
         try {
           this.parsed.push(await this.parseNode(node, html))
         } catch (e) {
+          const grandChildren = await getChildren(node)
+          if (Array.isArray(grandChildren)) {
+            await this.loop(grandChildren)
+            continue
+          }
+
           if (e instanceof Error) {
             error(`${node.key} -> error ${e.message}`)
           } else {
@@ -188,8 +193,8 @@ class Fta {
     const $ = cheerio.load(html)
     const $home = $('#home')
     const $table = $($home.find('table')[0])
-    const tds = $table.find('td').map((_, e) => $(e).text())
-    const ths = $table.find('th').map((_, e) => $(e).text())
+    const tds = $table.find('td').map((_, e) => $(e).text()).toArray()
+    const ths = $table.find('th').map((_, e) => $(e).text()).toArray()
     if (tds.length !== ths.length) {
       throw new Error(JSON.stringify({ tds, ths }))
     }
