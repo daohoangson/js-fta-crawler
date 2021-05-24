@@ -4,10 +4,24 @@
 
 ## Usage
 
+### Pre-built binaries
+
+This repository has been setup to build standalone binaries for Linux, macOS and Windows for each commits.
+Node.js is no longer required if you are using the binary.
+Replace `npm start` with the downloaded file to use it directly:
+
+```bash
+crawl-win.exe --export mexico
+```
+
+Please note that some OSes have built-in protection which will block running the binary after downloading.
+You may need to double click the file to trigger the bypass procedure before executing it in the command line.
+
 ### Prerequisite
 
 ```bash
 # Install Node.js via Homebrew
+# or go to https://nodejs.org/en/download/ yourself
 brew install node
 
 # Install dependencies
