@@ -1,7 +1,7 @@
 {
   "name": "fta",
   "version": "1.0.0",
-  "description": "",
+  "description": "Crawler to extract tariff information from https://fta.moit.gov.vn.",
   "main": "index.js",
   "scripts": {
     "build": "tsc && pkg --out-path out out/bin/crawl.js",

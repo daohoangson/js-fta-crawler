@@ -1,6 +1,6 @@
 # FTA crawler
 
-[FTA website](https://fta.moit.gov.vn) crawler to extract tarrif information.
+[FTA website](https://fta.moit.gov.vn) crawler to extract tariff information.
 
 ## Usage
 
